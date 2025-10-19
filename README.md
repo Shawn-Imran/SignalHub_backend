@@ -308,16 +308,6 @@ Once started, you can access:
 
 ```
 SignalHub/
-├── config/                          # Configuration files
-│   ├── checkstyle/                  # Code style rules
-│   └── spotbugs/                    # Static analysis config
-├── specs/                           # Feature specifications
-│   └── 001-real-time-communication/
-│       ├── plan.md                  # Implementation plan
-│       ├── spec.md                  # Feature specification
-│       ├── data-model.md            # Database schema & entities
-│       ├── quickstart.md            # Developer guide
-│       └── contracts/               # API contracts
 ├── src/
 │   ├── main/
 │   │   ├── java/com/realtime/communication/
