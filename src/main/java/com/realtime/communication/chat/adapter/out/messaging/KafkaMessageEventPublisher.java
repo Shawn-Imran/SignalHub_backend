@@ -26,21 +26,19 @@ public class KafkaMessageEventPublisher {
             throw new IllegalArgumentException("Event cannot be null");
         }
 
-        String topic = MESSAGE_EVENTS_TOPIC;
         String key = determineKey(event);
 
-        kafkaTemplate.send(topic, key, event);
+        kafkaTemplate.send(MESSAGE_EVENTS_TOPIC, key, event);
     }
 
     private String determineKey(Event event) {
         if (event instanceof MessageSentEvent) {
             return ((MessageSentEvent) event).getConversationId().toString();
         } else if (event instanceof MessageDeliveredEvent) {
-            return ((MessageDeliveredEvent) event).getMessageId().value().toString();
+            return ((MessageDeliveredEvent) event).getMessageId().getValue().toString();
         } else if (event instanceof MessageReadEvent) {
-            return ((MessageReadEvent) event).getMessageId().value().toString();
+            return ((MessageReadEvent) event).getMessageId().getValue().toString();
         }
-        return event.getId().toString();
+        return event.getEventId();
     }
 }
-

@@ -1,24 +1,29 @@
 package com.realtime.communication.auth.domain.model;
 
-import com.realtime.communication.shared.domain.exception.ValidationException;
+import lombok.Value;
+
+import java.util.Objects;
 
 /**
- * Value object representing a Username
- * Validation: 3-30 characters, alphanumeric and underscore only
+ * Value object representing a username
  */
-public record Username(String value) {
-    private static final String USERNAME_PATTERN = "^[a-zA-Z0-9_]{3,30}$";
+@Value
+public class Username {
+    String value;
 
-    public Username {
-        if (value == null || value.isBlank()) {
-            throw new ValidationException("Username cannot be empty");
-        }
+    public Username(String value) {
+        this.value = validate(value);
+    }
+
+    private String validate(String value) {
+        Objects.requireNonNull(value, "Username cannot be null");
         if (value.length() < 3 || value.length() > 30) {
-            throw new ValidationException("Username must be between 3 and 30 characters");
+            throw new IllegalArgumentException("Username must be between 3 and 30 characters");
         }
-        if (!value.matches(USERNAME_PATTERN)) {
-            throw new ValidationException("Username can only contain letters, numbers, and underscores");
+        if (!value.matches("^[a-zA-Z0-9_]+$")) {
+            throw new IllegalArgumentException("Username can only contain letters, numbers, and underscores");
         }
+        return value;
     }
 }
 

@@ -17,3 +17,4 @@ public interface ConversationRepository {
     void delete(ConversationId conversationId);
 }
 
+

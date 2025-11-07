@@ -77,11 +77,10 @@ public class MetricsCollector {
      * Record a gauge value (current state).
      */
     public void recordGauge(String name, Number value, String... tags) {
-        meterRegistry.gauge(name, java.util.Arrays.asList(tags), value);
+        meterRegistry.gauge(name, io.micrometer.core.instrument.Tags.of(tags), value);
     }
 
     private String buildKey(String name, String... tags) {
         return name + ":" + String.join(":", tags);
     }
 }
-

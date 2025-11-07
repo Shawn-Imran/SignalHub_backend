@@ -42,7 +42,8 @@ public class LoginUseCase {
         }
 
         // Verify password
-        if (!user.getPassword().matches(request.password())) {
+        HashedPassword hashedPassword = HashedPassword.fromHash(user.getPasswordHash());
+        if (!hashedPassword.matches(request.password())) {
             throw new UnauthorizedException("Invalid credentials");
         }
 
@@ -51,7 +52,7 @@ public class LoginUseCase {
         userRepository.save(user);
 
         // Generate tokens
-        String accessToken = jwtTokenProvider.generateAccessToken(user.getId().value().toString());
+        String accessToken = jwtTokenProvider.generateAccessToken(user.getId().getValue().toString());
         String refreshToken = jwtTokenProvider.generateRefreshToken();
         Long expiresIn = jwtTokenProvider.getAccessTokenExpirationMs();
 
@@ -70,4 +71,3 @@ public class LoginUseCase {
         return new LoginResponse(accessToken, refreshToken, expiresIn);
     }
 }
-

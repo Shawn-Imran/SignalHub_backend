@@ -51,9 +51,9 @@ public class LoadConversationHistoryUseCase {
 
     private MessageDTO toDTO(Message message) {
         return new MessageDTO(
-            message.getId().value(),
-            message.getConversationId().value(),
-            message.getSenderId().value(),
+            message.getId().getValue(),
+            message.getConversationId().getValue(),
+            message.getSenderId().getValue(),
             message.getContent(),
             message.getType(),
             message.getStatus(),

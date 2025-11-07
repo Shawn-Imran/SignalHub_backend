@@ -38,14 +38,13 @@ public class CreateConversationUseCase {
 
     private ConversationDTO toDTO(Conversation conversation) {
         return new ConversationDTO(
-            conversation.getId().value(),
+            conversation.getId().getValue(),
             conversation.getType(),
             conversation.getParticipants().stream()
-                .map(UserId::value)
+                .map(UserId::getValue)
                 .collect(Collectors.toSet()),
             conversation.getCreatedAt(),
             conversation.getLastMessageAt()
         );
     }
 }
-

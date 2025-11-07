@@ -1,6 +1,9 @@
 package com.realtime.communication.chat.adapter.out.persistence;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+
 import java.time.Instant;
 import java.util.UUID;
 
@@ -9,6 +12,8 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "messages")
+@Getter
+@Setter
 public class MessageJpaEntity {
 
     @Id
@@ -56,110 +61,4 @@ public class MessageJpaEntity {
             sentAt = Instant.now();
         }
     }
-
-    // Getters and Setters
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public UUID getConversationId() {
-        return conversationId;
-    }
-
-    public void setConversationId(UUID conversationId) {
-        this.conversationId = conversationId;
-    }
-
-    public UUID getSenderId() {
-        return senderId;
-    }
-
-    public void setSenderId(UUID senderId) {
-        this.senderId = senderId;
-    }
-
-    public String getContent() {
-        return content;
-    }
-
-    public void setContent(String content) {
-        this.content = content;
-    }
-
-    public String getType() {
-        return type;
-    }
-
-    public void setType(String type) {
-        this.type = type;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public void setStatus(String status) {
-        this.status = status;
-    }
-
-    public Instant getSentAt() {
-        return sentAt;
-    }
-
-    public void setSentAt(Instant sentAt) {
-        this.sentAt = sentAt;
-    }
-
-    public Instant getDeliveredAt() {
-        return deliveredAt;
-    }
-
-    public void setDeliveredAt(Instant deliveredAt) {
-        this.deliveredAt = deliveredAt;
-    }
-
-    public Instant getReadAt() {
-        return readAt;
-    }
-
-    public void setReadAt(Instant readAt) {
-        this.readAt = readAt;
-    }
-
-    public boolean isEdited() {
-        return edited;
-    }
-
-    public void setEdited(boolean edited) {
-        this.edited = edited;
-    }
-
-    public Instant getEditedAt() {
-        return editedAt;
-    }
-
-    public void setEditedAt(Instant editedAt) {
-        this.editedAt = editedAt;
-    }
-
-    public boolean isDeleted() {
-        return deleted;
-    }
-
-    public void setDeleted(boolean deleted) {
-        this.deleted = deleted;
-    }
-
-    public Instant getDeletedAt() {
-        return deletedAt;
-    }
-
-    public void setDeletedAt(Instant deletedAt) {
-        this.deletedAt = deletedAt;
-    }
 }
-

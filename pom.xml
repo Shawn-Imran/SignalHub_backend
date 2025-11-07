@@ -109,11 +109,11 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- S3/MinIO Client -->
+        <!-- S3 Client - AWS SDK for Supabase S3 -->
         <dependency>
-            <groupId>io.minio</groupId>
-            <artifactId>minio</artifactId>
-            <version>8.5.11</version>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk-s3</artifactId>
+            <version>1.12.765</version>
         </dependency>
 
         <!-- Monitoring -->

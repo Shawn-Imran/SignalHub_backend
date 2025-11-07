@@ -12,6 +12,11 @@ import org.springframework.stereotype.Controller;
 import java.util.UUID;
 
 /**
+ * Request for typing indicator
+ */
+record TypingIndicatorRequest(UUID conversationId, boolean isTyping) {}
+
+/**
  * WebSocket controller for typing indicators
  */
 @Controller
@@ -49,7 +54,4 @@ public class TypingIndicatorController {
             dto
         );
     }
-
-    private record TypingIndicatorRequest(UUID conversationId, boolean isTyping) {}
 }
-

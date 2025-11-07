@@ -10,20 +10,21 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * JPA implementation of ConversationRepository
+ * Spring Data JPA repository interface for Conversation
  */
-@Repository
-public interface JpaConversationRepositoryInterface extends JpaRepository<ConversationJpaEntity, UUID> {
+interface JpaConversationRepositoryInterface extends JpaRepository<ConversationJpaEntity, UUID> {
     @Query("SELECT c FROM ConversationJpaEntity c JOIN c.participantIds p WHERE p = :userId")
     List<ConversationJpaEntity> findByParticipantId(UUID userId);
 }
 
+/**
+ * JPA implementation of ConversationRepository
+ */
 @Repository
 class JpaConversationRepositoryImpl implements ConversationRepository {
 
@@ -41,29 +42,29 @@ class JpaConversationRepositoryImpl implements ConversationRepository {
     }
 
     @Override
-    public Optional<Conversation> findById(ConversationId conversationId) {
-        return jpaRepository.findById(conversationId.value()).map(this::toDomain);
+    public java.util.Optional<Conversation> findById(ConversationId conversationId) {
+        return jpaRepository.findById(conversationId.getValue()).map(this::toDomain);
     }
 
     @Override
     public List<Conversation> findByParticipant(UserId userId) {
-        return jpaRepository.findByParticipantId(userId.value()).stream()
+        return jpaRepository.findByParticipantId(userId.getValue()).stream()
             .map(this::toDomain)
             .collect(Collectors.toList());
     }
 
     @Override
     public void delete(ConversationId conversationId) {
-        jpaRepository.deleteById(conversationId.value());
+        jpaRepository.deleteById(conversationId.getValue());
     }
 
     private ConversationJpaEntity toEntity(Conversation conversation) {
         ConversationJpaEntity entity = new ConversationJpaEntity();
-        entity.setId(conversation.getId().value());
+        entity.setId(conversation.getId().getValue());
         entity.setType(conversation.getType().name());
         entity.setParticipantIds(
             conversation.getParticipants().stream()
-                .map(UserId::value)
+                .map(UserId::getValue)
                 .collect(Collectors.toSet())
         );
         entity.setCreatedAt(conversation.getCreatedAt());
@@ -79,8 +80,9 @@ class JpaConversationRepositoryImpl implements ConversationRepository {
         return new Conversation(
             new ConversationId(entity.getId()),
             ConversationType.valueOf(entity.getType()),
-            participants
+            participants,
+            entity.getCreatedAt(),
+            entity.getLastMessageAt()
         );
     }
 }
-

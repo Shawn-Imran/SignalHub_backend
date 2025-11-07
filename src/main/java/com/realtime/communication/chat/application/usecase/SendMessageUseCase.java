@@ -42,7 +42,7 @@ public class SendMessageUseCase {
         Message savedMessage = messageRepository.save(message);
 
         // Update conversation last message timestamp
-        conversation.updateLastMessage();
+        conversation.updateLastMessageTime();
         conversationRepository.save(conversation);
 
         // Convert to DTO
@@ -51,9 +51,9 @@ public class SendMessageUseCase {
 
     private MessageDTO toDTO(Message message) {
         return new MessageDTO(
-            message.getId().value(),
-            message.getConversationId().value(),
-            message.getSenderId().value(),
+            message.getId().getValue(),
+            message.getConversationId().getValue(),
+            message.getSenderId().getValue(),
             message.getContent(),
             message.getType(),
             message.getStatus(),
@@ -65,4 +65,3 @@ public class SendMessageUseCase {
         );
     }
 }
-

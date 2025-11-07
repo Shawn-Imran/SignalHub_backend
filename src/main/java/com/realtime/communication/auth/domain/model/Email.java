@@ -1,20 +1,30 @@
 package com.realtime.communication.auth.domain.model;
 
-import com.realtime.communication.shared.domain.exception.ValidationException;
+import lombok.Value;
+
+import java.util.Objects;
+import java.util.regex.Pattern;
 
 /**
- * Value object representing an Email address
+ * Value object representing an email address
  */
-public record Email(String value) {
-    private static final String EMAIL_PATTERN = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$";
+@Value
+public class Email {
+    private static final Pattern EMAIL_PATTERN =
+        Pattern.compile("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
 
-    public Email {
-        if (value == null || value.isBlank()) {
-            throw new ValidationException("Email cannot be empty");
+    String value;
+
+    public Email(String value) {
+        this.value = validate(value);
+    }
+
+    private String validate(String value) {
+        Objects.requireNonNull(value, "Email cannot be null");
+        if (!EMAIL_PATTERN.matcher(value).matches()) {
+            throw new IllegalArgumentException("Invalid email format");
         }
-        if (!value.matches(EMAIL_PATTERN)) {
-            throw new ValidationException("Invalid email format");
-        }
+        return value.toLowerCase();
     }
 }
 

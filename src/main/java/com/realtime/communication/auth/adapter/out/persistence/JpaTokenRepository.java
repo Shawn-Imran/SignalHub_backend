@@ -15,7 +15,7 @@ import java.util.UUID;
  * JPA implementation of TokenRepository
  */
 @Repository
-public interface JpaTokenRepositoryInterface extends JpaRepository<UserSessionJpaEntity, UUID> {
+interface JpaTokenRepositoryInterface extends JpaRepository<UserSessionJpaEntity, UUID> {
     Optional<UserSessionJpaEntity> findByRefreshToken(String refreshToken);
     
     @Modifying
@@ -52,7 +52,7 @@ class JpaTokenRepositoryImpl implements TokenRepository {
     private UserSessionJpaEntity toEntity(UserSession session) {
         UserSessionJpaEntity entity = new UserSessionJpaEntity();
         entity.setId(session.getId());
-        entity.setUserId(session.getUserId().value());
+        entity.setUserId(session.getUserId().getValue());
         entity.setAccessToken(session.getAccessToken());
         entity.setRefreshToken(session.getRefreshToken());
         entity.setDeviceInfo(session.getDeviceInfo());
@@ -73,4 +73,3 @@ class JpaTokenRepositoryImpl implements TokenRepository {
         );
     }
 }
-

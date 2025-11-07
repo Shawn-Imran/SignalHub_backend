@@ -1,110 +1,115 @@
 package com.realtime.communication.auth.domain.model;
 
-import com.realtime.communication.shared.domain.model.BaseEntity;
+import lombok.Getter;
 
 import java.time.Instant;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.Objects;
 
 /**
- * User Aggregate Root
- * Represents a user in the authentication context
+ * User aggregate root
  */
-public class User extends BaseEntity {
+@Getter
+public class User {
     private final UserId id;
-    private Username username;
-    private Email email;
-    private HashedPassword password;
-    private UserProfile profile;
+    private final Username username;
+    private final Email email;
+    private String passwordHash;
+    private String displayName;
+    private String avatarUrl;
+    private String bio;
     private UserStatus status;
-    private Set<Role> roles;
     private boolean blocked;
     private boolean emailVerified;
+    private final Instant createdAt;
     private Instant lastSeenAt;
 
-    public User(UserId id, Username username, Email email, HashedPassword password, UserProfile profile) {
+    // Constructor for creating a new user
+    public User(UserId id, Username username, Email email, String passwordHash) {
+        this.id = Objects.requireNonNull(id, "User ID cannot be null");
+        this.username = Objects.requireNonNull(username, "Username cannot be null");
+        this.email = Objects.requireNonNull(email, "Email cannot be null");
+        this.passwordHash = Objects.requireNonNull(passwordHash, "Password hash cannot be null");
+        this.status = UserStatus.OFFLINE;
+        this.blocked = false;
+        this.emailVerified = false;
+        this.createdAt = Instant.now();
+    }
+
+    // Full constructor for reconstitution from persistence
+    public User(UserId id, Username username, Email email, String passwordHash,
+                String displayName, String avatarUrl, String bio, UserStatus status,
+                boolean blocked, boolean emailVerified, Instant createdAt, Instant lastSeenAt) {
         this.id = id;
         this.username = username;
         this.email = email;
-        this.password = password;
-        this.profile = profile;
-        this.status = UserStatus.OFFLINE;
-        this.roles = new HashSet<>();
-        this.blocked = false;
-        this.emailVerified = false;
-        this.lastSeenAt = null;
+        this.passwordHash = passwordHash;
+        this.displayName = displayName;
+        this.avatarUrl = avatarUrl;
+        this.bio = bio;
+        this.status = status;
+        this.blocked = blocked;
+        this.emailVerified = emailVerified;
+        this.createdAt = createdAt;
+        this.lastSeenAt = lastSeenAt;
     }
 
+    // Domain methods
     public void updateStatus(UserStatus newStatus) {
-        this.status = newStatus;
-        if (newStatus == UserStatus.OFFLINE) {
+        this.status = Objects.requireNonNull(newStatus, "Status cannot be null");
+        if (newStatus == UserStatus.ONLINE || newStatus == UserStatus.AWAY || newStatus == UserStatus.BUSY) {
             this.lastSeenAt = Instant.now();
         }
     }
 
-    public void block() {
-        this.blocked = true;
+    public void updateProfile(String displayName, String avatarUrl, String bio) {
+        this.displayName = displayName;
+        this.avatarUrl = avatarUrl;
+        this.bio = bio;
     }
 
-    public void unblock() {
-        this.blocked = false;
+    public void changePassword(String newPasswordHash) {
+        this.passwordHash = Objects.requireNonNull(newPasswordHash, "Password hash cannot be null");
     }
 
     public void verifyEmail() {
         this.emailVerified = true;
     }
 
-    public void updateProfile(UserProfile newProfile) {
-        this.profile = newProfile;
+    public void block() {
+        this.blocked = true;
+        this.status = UserStatus.OFFLINE;
     }
 
-    public void addRole(Role role) {
-        this.roles.add(role);
+    public void unblock() {
+        this.blocked = false;
     }
 
-    public void removeRole(Role role) {
-        this.roles.remove(role);
+    public boolean isActive() {
+        return !blocked && emailVerified;
     }
 
-    // Getters
-    public UserId getId() {
-        return id;
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        User user = (User) o;
+        return Objects.equals(id, user.id);
     }
 
-    public Username getUsername() {
-        return username;
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
     }
 
-    public Email getEmail() {
-        return email;
-    }
-
-    public HashedPassword getPassword() {
-        return password;
-    }
-
-    public UserProfile getProfile() {
-        return profile;
-    }
-
-    public UserStatus getStatus() {
-        return status;
-    }
-
-    public Set<Role> getRoles() {
-        return new HashSet<>(roles);
-    }
-
-    public boolean isBlocked() {
-        return blocked;
-    }
-
-    public boolean isEmailVerified() {
-        return emailVerified;
-    }
-
-    public Instant getLastSeenAt() {
-        return lastSeenAt;
+    @Override
+    public String toString() {
+        return "User{" +
+                "id=" + id +
+                ", username=" + username +
+                ", email=" + email +
+                ", status=" + status +
+                ", blocked=" + blocked +
+                '}';
     }
 }
 

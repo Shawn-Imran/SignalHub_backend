@@ -35,12 +35,11 @@ public class RegisterUserUseCase {
         // Create new user
         UserId userId = UserId.generate();
         HashedPassword password = HashedPassword.fromPlainText(request.password());
-        UserProfile profile = new UserProfile(request.displayName(), null, null);
 
-        User user = new User(userId, username, email, password, profile);
+        User user = new User(userId, username, email, password.getHash());
+        user.updateProfile(request.displayName(), null, null);
 
         // Save user
         return userRepository.save(user);
     }
 }
-

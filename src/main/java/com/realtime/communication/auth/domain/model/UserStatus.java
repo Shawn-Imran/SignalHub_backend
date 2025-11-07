@@ -1,12 +1,12 @@
 package com.realtime.communication.auth.domain.model;
 
 /**
- * Enum representing User Status
+ * Enum representing user status
  */
 public enum UserStatus {
-    ONLINE,
-    OFFLINE,
-    BUSY,
-    AWAY
+    ONLINE,   // User is currently online
+    OFFLINE,  // User is offline
+    AWAY,     // User is away
+    BUSY      // User is busy
 }
 

@@ -28,17 +28,17 @@ public class RedisPresenceAdapter implements PresenceGateway {
 
     @Override
     public void setOnline(UserId userId) {
-        redisTemplate.opsForSet().add(ONLINE_USERS_KEY, userId.value().toString());
+        redisTemplate.opsForSet().add(ONLINE_USERS_KEY, userId.getValue().toString());
     }
 
     @Override
     public void setOffline(UserId userId) {
-        redisTemplate.opsForSet().remove(ONLINE_USERS_KEY, userId.value().toString());
+        redisTemplate.opsForSet().remove(ONLINE_USERS_KEY, userId.getValue().toString());
     }
 
     @Override
     public boolean isOnline(UserId userId) {
-        Boolean isMember = redisTemplate.opsForSet().isMember(ONLINE_USERS_KEY, userId.value().toString());
+        Boolean isMember = redisTemplate.opsForSet().isMember(ONLINE_USERS_KEY, userId.getValue().toString());
         return Boolean.TRUE.equals(isMember);
     }
 
@@ -55,19 +55,19 @@ public class RedisPresenceAdapter implements PresenceGateway {
 
     @Override
     public void setTyping(UserId userId, UUID conversationId) {
-        String key = TYPING_KEY_PREFIX + conversationId + ":" + userId.value();
+        String key = TYPING_KEY_PREFIX + conversationId + ":" + userId.getValue();
         redisTemplate.opsForValue().set(key, "typing", TYPING_TIMEOUT);
     }
 
     @Override
     public void stopTyping(UserId userId, UUID conversationId) {
-        String key = TYPING_KEY_PREFIX + conversationId + ":" + userId.value();
+        String key = TYPING_KEY_PREFIX + conversationId + ":" + userId.getValue();
         redisTemplate.delete(key);
     }
 
     @Override
     public boolean isTyping(UserId userId, UUID conversationId) {
-        String key = TYPING_KEY_PREFIX + conversationId + ":" + userId.value();
+        String key = TYPING_KEY_PREFIX + conversationId + ":" + userId.getValue();
         return Boolean.TRUE.equals(redisTemplate.hasKey(key));
     }
 }

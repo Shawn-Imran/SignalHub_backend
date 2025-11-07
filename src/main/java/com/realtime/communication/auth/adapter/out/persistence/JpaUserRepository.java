@@ -12,7 +12,7 @@ import java.util.UUID;
  * JPA implementation of UserRepository
  */
 @Repository
-public interface JpaUserRepositoryInterface extends JpaRepository<UserJpaEntity, UUID> {
+interface JpaUserRepositoryInterface extends JpaRepository<UserJpaEntity, UUID> {
     Optional<UserJpaEntity> findByUsername(String username);
     Optional<UserJpaEntity> findByEmail(String email);
 }
@@ -35,33 +35,33 @@ class JpaUserRepositoryImpl implements UserRepository {
 
     @Override
     public Optional<User> findById(UserId userId) {
-        return jpaRepository.findById(userId.value()).map(this::toDomain);
+        return jpaRepository.findById(userId.getValue()).map(this::toDomain);
     }
 
     @Override
     public Optional<User> findByUsername(Username username) {
-        return jpaRepository.findByUsername(username.value()).map(this::toDomain);
+        return jpaRepository.findByUsername(username.getValue()).map(this::toDomain);
     }
 
     @Override
     public Optional<User> findByEmail(Email email) {
-        return jpaRepository.findByEmail(email.value()).map(this::toDomain);
+        return jpaRepository.findByEmail(email.getValue()).map(this::toDomain);
     }
 
     @Override
     public void delete(UserId userId) {
-        jpaRepository.deleteById(userId.value());
+        jpaRepository.deleteById(userId.getValue());
     }
 
     private UserJpaEntity toEntity(User user) {
         UserJpaEntity entity = new UserJpaEntity();
-        entity.setId(user.getId().value());
-        entity.setUsername(user.getUsername().value());
-        entity.setEmail(user.getEmail().value());
-        entity.setPasswordHash(user.getPassword().getHash());
-        entity.setDisplayName(user.getProfile().displayName());
-        entity.setAvatarUrl(user.getProfile().avatarUrl());
-        entity.setBio(user.getProfile().bio());
+        entity.setId(user.getId().getValue());
+        entity.setUsername(user.getUsername().getValue());
+        entity.setEmail(user.getEmail().getValue());
+        entity.setPasswordHash(user.getPasswordHash());
+        entity.setDisplayName(user.getDisplayName());
+        entity.setAvatarUrl(user.getAvatarUrl());
+        entity.setBio(user.getBio());
         entity.setStatus(user.getStatus().name());
         entity.setBlocked(user.isBlocked());
         entity.setEmailVerified(user.isEmailVerified());
@@ -74,24 +74,20 @@ class JpaUserRepositoryImpl implements UserRepository {
         UserId id = new UserId(entity.getId());
         Username username = new Username(entity.getUsername());
         Email email = new Email(entity.getEmail());
-        HashedPassword password = HashedPassword.fromHash(entity.getPasswordHash());
-        UserProfile profile = new UserProfile(
+
+        return new User(
+            id,
+            username,
+            email,
+            entity.getPasswordHash(),
             entity.getDisplayName(),
             entity.getAvatarUrl(),
-            entity.getBio()
+            entity.getBio(),
+            UserStatus.valueOf(entity.getStatus()),
+            entity.isBlocked(),
+            entity.isEmailVerified(),
+            entity.getCreatedAt(),
+            entity.getLastSeenAt()
         );
-
-        User user = new User(id, username, email, password, profile);
-        user.updateStatus(UserStatus.valueOf(entity.getStatus()));
-        
-        if (entity.isBlocked()) {
-            user.block();
-        }
-        if (entity.isEmailVerified()) {
-            user.verifyEmail();
-        }
-
-        return user;
     }
 }
-

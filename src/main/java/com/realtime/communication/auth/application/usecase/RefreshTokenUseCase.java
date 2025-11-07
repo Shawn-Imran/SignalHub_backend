@@ -36,7 +36,7 @@ public class RefreshTokenUseCase {
         }
 
         // Generate new tokens
-        String newAccessToken = jwtTokenProvider.generateAccessToken(session.getUserId().value().toString());
+        String newAccessToken = jwtTokenProvider.generateAccessToken(session.getUserId().getValue().toString());
         String newRefreshToken = jwtTokenProvider.generateRefreshToken();
         Long expiresIn = jwtTokenProvider.getAccessTokenExpirationMs();
 

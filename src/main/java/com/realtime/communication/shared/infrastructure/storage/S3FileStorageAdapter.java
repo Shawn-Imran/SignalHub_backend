@@ -1,16 +1,17 @@
 package com.realtime.communication.shared.infrastructure.storage;
 
-import io.minio.*;
-import io.minio.http.Method;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.model.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.io.InputStream;
-import java.util.concurrent.TimeUnit;
+import java.net.URL;
+import java.util.Date;
 
 /**
- * S3-compatible file storage adapter using MinIO client.
+ * S3-compatible file storage adapter using AWS S3 SDK.
  * Supports file upload, download, and presigned URL generation.
  */
 @Component
@@ -18,28 +19,23 @@ public class S3FileStorageAdapter {
 
     private static final Logger logger = LoggerFactory.getLogger(S3FileStorageAdapter.class);
 
-    private final MinioClient minioClient;
+    private final AmazonS3 amazonS3Client;
     private final String bucketName;
 
-    public S3FileStorageAdapter(MinioClient minioClient, String storageBucketName) {
-        this.minioClient = minioClient;
+    public S3FileStorageAdapter(AmazonS3 amazonS3Client, String storageBucketName) {
+        this.amazonS3Client = amazonS3Client;
         this.bucketName = storageBucketName;
         ensureBucketExists();
     }
 
     private void ensureBucketExists() {
         try {
-            boolean exists = minioClient.bucketExists(
-                    BucketExistsArgs.builder().bucket(bucketName).build()
-            );
-            if (!exists) {
-                minioClient.makeBucket(
-                        MakeBucketArgs.builder().bucket(bucketName).build()
-                );
+            if (!amazonS3Client.doesBucketExistV2(bucketName)) {
+                amazonS3Client.createBucket(bucketName);
                 logger.info("Created storage bucket: {}", bucketName);
             }
         } catch (Exception e) {
-            logger.error("Failed to ensure bucket exists: {}", bucketName, e);
+            logger.warn("Could not create bucket (may already exist): {}", bucketName);
         }
     }
 
@@ -48,14 +44,13 @@ public class S3FileStorageAdapter {
      */
     public void uploadFile(String objectName, InputStream inputStream, String contentType, long size) {
         try {
-            minioClient.putObject(
-                    PutObjectArgs.builder()
-                            .bucket(bucketName)
-                            .object(objectName)
-                            .stream(inputStream, size, -1)
-                            .contentType(contentType)
-                            .build()
-            );
+            ObjectMetadata metadata = new ObjectMetadata();
+            metadata.setContentType(contentType);
+            metadata.setContentLength(size);
+
+            PutObjectRequest putObjectRequest = new PutObjectRequest(bucketName, objectName, inputStream, metadata);
+            amazonS3Client.putObject(putObjectRequest);
+
             logger.info("Uploaded file: {}", objectName);
         } catch (Exception e) {
             logger.error("Failed to upload file: {}", objectName, e);
@@ -68,12 +63,8 @@ public class S3FileStorageAdapter {
      */
     public InputStream downloadFile(String objectName) {
         try {
-            return minioClient.getObject(
-                    GetObjectArgs.builder()
-                            .bucket(bucketName)
-                            .object(objectName)
-                            .build()
-            );
+            S3Object s3Object = amazonS3Client.getObject(bucketName, objectName);
+            return s3Object.getObjectContent();
         } catch (Exception e) {
             logger.error("Failed to download file: {}", objectName, e);
             throw new RuntimeException("File download failed", e);
@@ -85,14 +76,18 @@ public class S3FileStorageAdapter {
      */
     public String getPresignedUrl(String objectName, int expiryMinutes) {
         try {
-            return minioClient.getPresignedObjectUrl(
-                    GetPresignedObjectUrlArgs.builder()
-                            .method(Method.GET)
-                            .bucket(bucketName)
-                            .object(objectName)
-                            .expiry(expiryMinutes, TimeUnit.MINUTES)
-                            .build()
-            );
+            Date expiration = new Date();
+            long expiryTimeMillis = expiration.getTime();
+            expiryTimeMillis += 1000L * 60 * expiryMinutes;
+            expiration.setTime(expiryTimeMillis);
+
+            GeneratePresignedUrlRequest generatePresignedUrlRequest =
+                    new GeneratePresignedUrlRequest(bucketName, objectName)
+                            .withMethod(com.amazonaws.HttpMethod.GET)
+                            .withExpiration(expiration);
+
+            URL url = amazonS3Client.generatePresignedUrl(generatePresignedUrlRequest);
+            return url.toString();
         } catch (Exception e) {
             logger.error("Failed to generate presigned URL for: {}", objectName, e);
             throw new RuntimeException("Presigned URL generation failed", e);
@@ -104,12 +99,7 @@ public class S3FileStorageAdapter {
      */
     public void deleteFile(String objectName) {
         try {
-            minioClient.removeObject(
-                    RemoveObjectArgs.builder()
-                            .bucket(bucketName)
-                            .object(objectName)
-                            .build()
-            );
+            amazonS3Client.deleteObject(bucketName, objectName);
             logger.info("Deleted file: {}", objectName);
         } catch (Exception e) {
             logger.error("Failed to delete file: {}", objectName, e);
@@ -117,4 +107,3 @@ public class S3FileStorageAdapter {
         }
     }
 }
-
