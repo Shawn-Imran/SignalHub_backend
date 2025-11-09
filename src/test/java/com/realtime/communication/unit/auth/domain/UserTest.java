@@ -1,9 +1,10 @@
 package com.realtime.communication.unit.auth.domain;
 
 import com.realtime.communication.auth.domain.model.*;
-import com.realtime.communication.shared.domain.exception.ValidationException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Nested;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -11,138 +12,421 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Unit tests for User entity (Domain Layer)
- * TDD: These tests are written BEFORE implementation
+ * Unit tests for User entity
+ * Following TDD: These tests verify User domain logic
  */
 @DisplayName("User Entity Tests")
 class UserTest {
 
-    @Test
-    @DisplayName("Should create valid user with all required fields")
-    void shouldCreateValidUser() {
-        // Given
-        UserId userId = new UserId(UUID.randomUUID());
-        Username username = new Username("testuser");
-        Email email = new Email("test@example.com");
-        HashedPassword password = HashedPassword.fromPlainText("SecurePass123!");
-        UserProfile profile = new UserProfile("Test User", null, null);
+    private UserId userId;
+    private Username username;
+    private Email email;
+    private String passwordHash;
 
-        // When
-        User user = new User(userId, username, email, password, profile);
-
-        // Then
-        assertNotNull(user);
-        assertEquals(userId, user.getId());
-        assertEquals(username, user.getUsername());
-        assertEquals(email, user.getEmail());
-        assertEquals(UserStatus.OFFLINE, user.getStatus());
-        assertFalse(user.isBlocked());
-        assertFalse(user.isEmailVerified());
-        assertNotNull(user.getCreatedAt());
+    @BeforeEach
+    void setUp() {
+        userId = new UserId(UUID.randomUUID());
+        username = new Username("testuser");
+        email = new Email("test@example.com");
+        passwordHash = "$2a$10$hashedpassword";
     }
 
-    @Test
-    @DisplayName("Should throw exception when username is invalid")
-    void shouldThrowExceptionForInvalidUsername() {
-        // When/Then
-        assertThrows(ValidationException.class, () -> new Username("ab")); // Too short
-        assertThrows(ValidationException.class, () -> new Username("a".repeat(31))); // Too long
-        assertThrows(ValidationException.class, () -> new Username("user@name")); // Invalid chars
+    @Nested
+    @DisplayName("User Creation Tests")
+    class UserCreationTests {
+
+        @Test
+        @DisplayName("Should create user with valid parameters")
+        void shouldCreateUserWithValidParameters() {
+            // When
+            User user = new User(userId, username, email, passwordHash);
+
+            // Then
+            assertNotNull(user);
+            assertEquals(userId, user.getId());
+            assertEquals(username, user.getUsername());
+            assertEquals(email, user.getEmail());
+            assertEquals(passwordHash, user.getPasswordHash());
+            assertEquals(UserStatus.OFFLINE, user.getStatus());
+            assertFalse(user.isBlocked());
+            assertFalse(user.isEmailVerified());
+            assertNotNull(user.getCreatedAt());
+            assertFalse(user.isActive()); // Not active because email not verified
+        }
+
+        @Test
+        @DisplayName("Should throw exception when userId is null")
+        void shouldThrowExceptionWhenUserIdIsNull() {
+            // When & Then
+            assertThrows(NullPointerException.class, () ->
+                new User(null, username, email, passwordHash)
+            );
+        }
+
+        @Test
+        @DisplayName("Should throw exception when username is null")
+        void shouldThrowExceptionWhenUsernameIsNull() {
+            // When & Then
+            assertThrows(NullPointerException.class, () ->
+                new User(userId, null, email, passwordHash)
+            );
+        }
+
+        @Test
+        @DisplayName("Should throw exception when email is null")
+        void shouldThrowExceptionWhenEmailIsNull() {
+            // When & Then
+            assertThrows(NullPointerException.class, () ->
+                new User(userId, username, null, passwordHash)
+            );
+        }
+
+        @Test
+        @DisplayName("Should throw exception when passwordHash is null")
+        void shouldThrowExceptionWhenPasswordHashIsNull() {
+            // When & Then
+            assertThrows(NullPointerException.class, () ->
+                new User(userId, username, email, null)
+            );
+        }
     }
 
-    @Test
-    @DisplayName("Should throw exception when email is invalid")
-    void shouldThrowExceptionForInvalidEmail() {
-        // When/Then
-        assertThrows(ValidationException.class, () -> new Email("invalid-email"));
-        assertThrows(ValidationException.class, () -> new Email("@example.com"));
-        assertThrows(ValidationException.class, () -> new Email("user@"));
+    @Nested
+    @DisplayName("User Status Tests")
+    class UserStatusTests {
+
+        @Test
+        @DisplayName("Should update status to ONLINE and set lastSeenAt")
+        void shouldUpdateStatusToOnlineAndSetLastSeenAt() {
+            // Given
+            User user = new User(userId, username, email, passwordHash);
+            Instant beforeUpdate = Instant.now();
+
+            // When
+            user.updateStatus(UserStatus.ONLINE);
+
+            // Then
+            assertEquals(UserStatus.ONLINE, user.getStatus());
+            assertNotNull(user.getLastSeenAt());
+            assertTrue(user.getLastSeenAt().isAfter(beforeUpdate) ||
+                      user.getLastSeenAt().equals(beforeUpdate));
+        }
+
+        @Test
+        @DisplayName("Should update status to AWAY and set lastSeenAt")
+        void shouldUpdateStatusToAwayAndSetLastSeenAt() {
+            // Given
+            User user = new User(userId, username, email, passwordHash);
+
+            // When
+            user.updateStatus(UserStatus.AWAY);
+
+            // Then
+            assertEquals(UserStatus.AWAY, user.getStatus());
+            assertNotNull(user.getLastSeenAt());
+        }
+
+        @Test
+        @DisplayName("Should update status to BUSY and set lastSeenAt")
+        void shouldUpdateStatusToBusyAndSetLastSeenAt() {
+            // Given
+            User user = new User(userId, username, email, passwordHash);
+
+            // When
+            user.updateStatus(UserStatus.BUSY);
+
+            // Then
+            assertEquals(UserStatus.BUSY, user.getStatus());
+            assertNotNull(user.getLastSeenAt());
+        }
+
+        @Test
+        @DisplayName("Should update status to OFFLINE without updating lastSeenAt")
+        void shouldUpdateStatusToOfflineWithoutUpdatingLastSeenAt() {
+            // Given
+            User user = new User(userId, username, email, passwordHash);
+            user.updateStatus(UserStatus.ONLINE);
+            Instant lastSeenWhenOnline = user.getLastSeenAt();
+
+            // When
+            user.updateStatus(UserStatus.OFFLINE);
+
+            // Then
+            assertEquals(UserStatus.OFFLINE, user.getStatus());
+            assertEquals(lastSeenWhenOnline, user.getLastSeenAt());
+        }
+
+        @Test
+        @DisplayName("Should throw exception when status is null")
+        void shouldThrowExceptionWhenStatusIsNull() {
+            // Given
+            User user = new User(userId, username, email, passwordHash);
+
+            // When & Then
+            assertThrows(NullPointerException.class, () ->
+                user.updateStatus(null)
+            );
+        }
     }
 
-    @Test
-    @DisplayName("Should update user status")
-    void shouldUpdateUserStatus() {
-        // Given
-        User user = createValidUser();
+    @Nested
+    @DisplayName("User Profile Tests")
+    class UserProfileTests {
 
-        // When
-        user.updateStatus(UserStatus.ONLINE);
+        @Test
+        @DisplayName("Should update profile with valid data")
+        void shouldUpdateProfileWithValidData() {
+            // Given
+            User user = new User(userId, username, email, passwordHash);
+            String displayName = "Test User";
+            String avatarUrl = "https://example.com/avatar.jpg";
+            String bio = "This is my bio";
 
-        // Then
-        assertEquals(UserStatus.ONLINE, user.getStatus());
-        assertNotNull(user.getLastSeenAt());
+            // When
+            user.updateProfile(displayName, avatarUrl, bio);
+
+            // Then
+            assertEquals(displayName, user.getDisplayName());
+            assertEquals(avatarUrl, user.getAvatarUrl());
+            assertEquals(bio, user.getBio());
+        }
+
+        @Test
+        @DisplayName("Should update profile with null values")
+        void shouldUpdateProfileWithNullValues() {
+            // Given
+            User user = new User(userId, username, email, passwordHash);
+
+            // When
+            user.updateProfile(null, null, null);
+
+            // Then
+            assertNull(user.getDisplayName());
+            assertNull(user.getAvatarUrl());
+            assertNull(user.getBio());
+        }
     }
 
-    @Test
-    @DisplayName("Should block and unblock user")
-    void shouldBlockAndUnblockUser() {
-        // Given
-        User user = createValidUser();
+    @Nested
+    @DisplayName("Password Management Tests")
+    class PasswordManagementTests {
 
-        // When
-        user.block();
+        @Test
+        @DisplayName("Should change password with valid hash")
+        void shouldChangePasswordWithValidHash() {
+            // Given
+            User user = new User(userId, username, email, passwordHash);
+            String newPasswordHash = "$2a$10$newhashedpassword";
 
-        // Then
-        assertTrue(user.isBlocked());
+            // When
+            user.changePassword(newPasswordHash);
 
-        // When
-        user.unblock();
+            // Then
+            assertEquals(newPasswordHash, user.getPasswordHash());
+        }
 
-        // Then
-        assertFalse(user.isBlocked());
+        @Test
+        @DisplayName("Should throw exception when new password hash is null")
+        void shouldThrowExceptionWhenNewPasswordHashIsNull() {
+            // Given
+            User user = new User(userId, username, email, passwordHash);
+
+            // When & Then
+            assertThrows(NullPointerException.class, () ->
+                user.changePassword(null)
+            );
+        }
     }
 
-    @Test
-    @DisplayName("Should verify email")
-    void shouldVerifyEmail() {
-        // Given
-        User user = createValidUser();
-        assertFalse(user.isEmailVerified());
+    @Nested
+    @DisplayName("Email Verification Tests")
+    class EmailVerificationTests {
 
-        // When
-        user.verifyEmail();
+        @Test
+        @DisplayName("Should verify email")
+        void shouldVerifyEmail() {
+            // Given
+            User user = new User(userId, username, email, passwordHash);
+            assertFalse(user.isEmailVerified());
 
-        // Then
-        assertTrue(user.isEmailVerified());
+            // When
+            user.verifyEmail();
+
+            // Then
+            assertTrue(user.isEmailVerified());
+        }
+
+        @Test
+        @DisplayName("Should be active after email verification and not blocked")
+        void shouldBeActiveAfterEmailVerificationAndNotBlocked() {
+            // Given
+            User user = new User(userId, username, email, passwordHash);
+
+            // When
+            user.verifyEmail();
+
+            // Then
+            assertTrue(user.isActive());
+        }
     }
 
-    @Test
-    @DisplayName("Should update user profile")
-    void shouldUpdateUserProfile() {
-        // Given
-        User user = createValidUser();
-        UserProfile newProfile = new UserProfile("New Name", "http://avatar.url", "New bio");
+    @Nested
+    @DisplayName("Block/Unblock Tests")
+    class BlockUnblockTests {
 
-        // When
-        user.updateProfile(newProfile);
+        @Test
+        @DisplayName("Should block user and set status to OFFLINE")
+        void shouldBlockUserAndSetStatusToOffline() {
+            // Given
+            User user = new User(userId, username, email, passwordHash);
+            user.updateStatus(UserStatus.ONLINE);
 
-        // Then
-        assertEquals(newProfile, user.getProfile());
+            // When
+            user.block();
+
+            // Then
+            assertTrue(user.isBlocked());
+            assertEquals(UserStatus.OFFLINE, user.getStatus());
+            assertFalse(user.isActive());
+        }
+
+        @Test
+        @DisplayName("Should unblock user")
+        void shouldUnblockUser() {
+            // Given
+            User user = new User(userId, username, email, passwordHash);
+            user.block();
+
+            // When
+            user.unblock();
+
+            // Then
+            assertFalse(user.isBlocked());
+        }
+
+        @Test
+        @DisplayName("Should not be active when blocked even if email verified")
+        void shouldNotBeActiveWhenBlockedEvenIfEmailVerified() {
+            // Given
+            User user = new User(userId, username, email, passwordHash);
+            user.verifyEmail();
+
+            // When
+            user.block();
+
+            // Then
+            assertFalse(user.isActive());
+        }
     }
 
-    @Test
-    @DisplayName("Should track last seen timestamp when going offline")
-    void shouldTrackLastSeenWhenGoingOffline() {
-        // Given
-        User user = createValidUser();
-        Instant beforeUpdate = Instant.now();
+    @Nested
+    @DisplayName("Equality and HashCode Tests")
+    class EqualityTests {
 
-        // When
-        user.updateStatus(UserStatus.OFFLINE);
+        @Test
+        @DisplayName("Should be equal when same userId")
+        void shouldBeEqualWhenSameUserId() {
+            // Given
+            User user1 = new User(userId, username, email, passwordHash);
+            User user2 = new User(userId, new Username("different"),
+                                 new Email("different@example.com"), "differenthash");
 
-        // Then
-        assertNotNull(user.getLastSeenAt());
-        assertTrue(user.getLastSeenAt().isAfter(beforeUpdate) || user.getLastSeenAt().equals(beforeUpdate));
+            // Then
+            assertEquals(user1, user2);
+            assertEquals(user1.hashCode(), user2.hashCode());
+        }
+
+        @Test
+        @DisplayName("Should not be equal when different userId")
+        void shouldNotBeEqualWhenDifferentUserId() {
+            // Given
+            User user1 = new User(userId, username, email, passwordHash);
+            User user2 = new User(new UserId(UUID.randomUUID()), username, email, passwordHash);
+
+            // Then
+            assertNotEquals(user1, user2);
+        }
+
+        @Test
+        @DisplayName("Should be equal to itself")
+        void shouldBeEqualToItself() {
+            // Given
+            User user = new User(userId, username, email, passwordHash);
+
+            // Then
+            assertEquals(user, user);
+        }
+
+        @Test
+        @DisplayName("Should not be equal to null")
+        void shouldNotBeEqualToNull() {
+            // Given
+            User user = new User(userId, username, email, passwordHash);
+
+            // Then
+            assertNotEquals(null, user);
+        }
     }
 
-    private User createValidUser() {
-        return new User(
-            new UserId(UUID.randomUUID()),
-            new Username("testuser"),
-            new Email("test@example.com"),
-            HashedPassword.fromPlainText("SecurePass123!"),
-            new UserProfile("Test User", null, null)
-        );
+    @Nested
+    @DisplayName("Full Constructor Tests")
+    class FullConstructorTests {
+
+        @Test
+        @DisplayName("Should reconstitute user from persistence with full constructor")
+        void shouldReconstituteUserFromPersistence() {
+            // Given
+            String displayName = "Test User";
+            String avatarUrl = "https://example.com/avatar.jpg";
+            String bio = "My bio";
+            UserStatus status = UserStatus.ONLINE;
+            boolean blocked = false;
+            boolean emailVerified = true;
+            Instant createdAt = Instant.now().minusSeconds(3600);
+            Instant lastSeenAt = Instant.now();
+
+            // When
+            User user = new User(userId, username, email, passwordHash,
+                displayName, avatarUrl, bio, status, blocked, emailVerified,
+                createdAt, lastSeenAt);
+
+            // Then
+            assertEquals(userId, user.getId());
+            assertEquals(username, user.getUsername());
+            assertEquals(email, user.getEmail());
+            assertEquals(passwordHash, user.getPasswordHash());
+            assertEquals(displayName, user.getDisplayName());
+            assertEquals(avatarUrl, user.getAvatarUrl());
+            assertEquals(bio, user.getBio());
+            assertEquals(status, user.getStatus());
+            assertEquals(blocked, user.isBlocked());
+            assertEquals(emailVerified, user.isEmailVerified());
+            assertEquals(createdAt, user.getCreatedAt());
+            assertEquals(lastSeenAt, user.getLastSeenAt());
+        }
+    }
+
+    @Nested
+    @DisplayName("ToString Tests")
+    class ToStringTests {
+
+        @Test
+        @DisplayName("Should contain key user information in toString")
+        void shouldContainKeyUserInformationInToString() {
+            // Given
+            User user = new User(userId, username, email, passwordHash);
+
+            // When
+            String toString = user.toString();
+
+            // Then
+            assertTrue(toString.contains("User{"));
+            assertTrue(toString.contains("id="));
+            assertTrue(toString.contains("username="));
+            assertTrue(toString.contains("email="));
+            assertTrue(toString.contains("status="));
+            assertTrue(toString.contains("blocked="));
+        }
     }
 }
 

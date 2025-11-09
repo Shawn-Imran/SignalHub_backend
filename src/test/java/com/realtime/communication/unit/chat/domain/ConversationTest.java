@@ -1,328 +1,582 @@
 package com.realtime.communication.unit.chat.domain;
 
 import com.realtime.communication.auth.domain.model.UserId;
-import com.realtime.communication.chat.domain.model.*;
-import com.realtime.communication.shared.domain.exception.ValidationException;
+import com.realtime.communication.chat.domain.model.Conversation;
+import com.realtime.communication.chat.domain.model.ConversationId;
+import com.realtime.communication.chat.domain.model.ConversationType;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Nested;
 
+import java.time.Instant;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Unit tests for Conversation entity (Domain Layer)
- * TDD: These tests are written BEFORE implementation
+ * Unit tests for Conversation entity
+ * Following TDD: These tests verify Conversation domain logic
  */
 @DisplayName("Conversation Entity Tests")
 class ConversationTest {
 
-    @Test
-    @DisplayName("Should create one-to-one conversation with two participants")
-    void shouldCreateOneToOneConversation() {
-        // Given
-        ConversationId conversationId = new ConversationId(UUID.randomUUID());
-        UserId user1 = new UserId(UUID.randomUUID());
-        UserId user2 = new UserId(UUID.randomUUID());
-        Set<UserId> participants = Set.of(user1, user2);
+    private ConversationId conversationId;
+    private UserId user1Id;
+    private UserId user2Id;
+    private UserId user3Id;
 
-        // When
-        Conversation conversation = new Conversation(conversationId, ConversationType.ONE_TO_ONE, participants);
-
-        // Then
-        assertNotNull(conversation);
-        assertEquals(conversationId, conversation.getId());
-        assertEquals(ConversationType.ONE_TO_ONE, conversation.getType());
-        assertEquals(2, conversation.getParticipants().size());
-        assertTrue(conversation.hasParticipant(user1));
-        assertTrue(conversation.hasParticipant(user2));
-        assertNotNull(conversation.getCreatedAt());
+    @BeforeEach
+    void setUp() {
+        conversationId = new ConversationId(UUID.randomUUID());
+        user1Id = new UserId(UUID.randomUUID());
+        user2Id = new UserId(UUID.randomUUID());
+        user3Id = new UserId(UUID.randomUUID());
     }
 
-    @Test
-    @DisplayName("Should throw exception for one-to-one conversation without exactly 2 participants")
-    void shouldThrowExceptionForInvalidOneToOneParticipantCount() {
-        // Given
-        ConversationId conversationId = new ConversationId(UUID.randomUUID());
-        UserId user1 = new UserId(UUID.randomUUID());
+    @Nested
+    @DisplayName("Conversation Creation Tests")
+    class ConversationCreationTests {
 
-        // When/Then - Only 1 participant
-        assertThrows(ValidationException.class, 
-            () -> new Conversation(conversationId, ConversationType.ONE_TO_ONE, Set.of(user1)));
+        @Test
+        @DisplayName("Should create one-to-one conversation with two participants")
+        void shouldCreateOneToOneConversationWithTwoParticipants() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+            participants.add(user1Id);
+            participants.add(user2Id);
 
-        // When/Then - 3 participants
-        UserId user2 = new UserId(UUID.randomUUID());
-        UserId user3 = new UserId(UUID.randomUUID());
-        assertThrows(ValidationException.class, 
-            () -> new Conversation(conversationId, ConversationType.ONE_TO_ONE, Set.of(user1, user2, user3)));
+            // When
+            Conversation conversation = new Conversation(
+                conversationId,
+                ConversationType.ONE_TO_ONE,
+                participants
+            );
+
+            // Then
+            assertNotNull(conversation);
+            assertEquals(conversationId, conversation.getId());
+            assertEquals(ConversationType.ONE_TO_ONE, conversation.getType());
+            assertEquals(2, conversation.getParticipants().size());
+            assertTrue(conversation.hasParticipant(user1Id));
+            assertTrue(conversation.hasParticipant(user2Id));
+            assertNotNull(conversation.getCreatedAt());
+            assertNull(conversation.getLastMessageAt());
+        }
+
+        @Test
+        @DisplayName("Should create group conversation with multiple participants")
+        void shouldCreateGroupConversationWithMultipleParticipants() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+            participants.add(user1Id);
+            participants.add(user2Id);
+            participants.add(user3Id);
+
+            // When
+            Conversation conversation = new Conversation(
+                conversationId,
+                ConversationType.GROUP,
+                participants
+            );
+
+            // Then
+            assertEquals(ConversationType.GROUP, conversation.getType());
+            assertEquals(3, conversation.getParticipants().size());
+            assertTrue(conversation.hasParticipant(user1Id));
+            assertTrue(conversation.hasParticipant(user2Id));
+            assertTrue(conversation.hasParticipant(user3Id));
+        }
+
+        @Test
+        @DisplayName("Should throw exception when conversationId is null")
+        void shouldThrowExceptionWhenConversationIdIsNull() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+            participants.add(user1Id);
+            participants.add(user2Id);
+
+            // When & Then
+            assertThrows(NullPointerException.class, () ->
+                new Conversation(null, ConversationType.ONE_TO_ONE, participants)
+            );
+        }
+
+        @Test
+        @DisplayName("Should throw exception when conversation type is null")
+        void shouldThrowExceptionWhenConversationTypeIsNull() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+            participants.add(user1Id);
+            participants.add(user2Id);
+
+            // When & Then
+            assertThrows(NullPointerException.class, () ->
+                new Conversation(conversationId, null, participants)
+            );
+        }
+
+        @Test
+        @DisplayName("Should throw exception when participants is null")
+        void shouldThrowExceptionWhenParticipantsIsNull() {
+            // When & Then
+            assertThrows(NullPointerException.class, () ->
+                new Conversation(conversationId, ConversationType.ONE_TO_ONE, null)
+            );
+        }
+
+        @Test
+        @DisplayName("Should throw exception when participants is empty")
+        void shouldThrowExceptionWhenParticipantsIsEmpty() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+
+            // When & Then
+            IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                new Conversation(conversationId, ConversationType.ONE_TO_ONE, participants)
+            );
+            assertTrue(exception.getMessage().contains("at least one participant"));
+        }
+
+        @Test
+        @DisplayName("Should throw exception when one-to-one conversation has less than 2 participants")
+        void shouldThrowExceptionWhenOneToOneConversationHasLessThan2Participants() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+            participants.add(user1Id);
+
+            // When & Then
+            IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                new Conversation(conversationId, ConversationType.ONE_TO_ONE, participants)
+            );
+            assertTrue(exception.getMessage().contains("exactly 2 participants"));
+        }
+
+        @Test
+        @DisplayName("Should throw exception when one-to-one conversation has more than 2 participants")
+        void shouldThrowExceptionWhenOneToOneConversationHasMoreThan2Participants() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+            participants.add(user1Id);
+            participants.add(user2Id);
+            participants.add(user3Id);
+
+            // When & Then
+            IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                new Conversation(conversationId, ConversationType.ONE_TO_ONE, participants)
+            );
+            assertTrue(exception.getMessage().contains("exactly 2 participants"));
+        }
     }
 
-    @Test
-    @DisplayName("Should create group conversation with multiple participants")
-    void shouldCreateGroupConversation() {
-        // Given
-        ConversationId conversationId = new ConversationId(UUID.randomUUID());
-        UserId user1 = new UserId(UUID.randomUUID());
-        UserId user2 = new UserId(UUID.randomUUID());
-        UserId user3 = new UserId(UUID.randomUUID());
-        Set<UserId> participants = Set.of(user1, user2, user3);
+    @Nested
+    @DisplayName("Last Message Time Tests")
+    class LastMessageTimeTests {
 
-        // When
-        Conversation conversation = new Conversation(conversationId, ConversationType.GROUP, participants);
+        @Test
+        @DisplayName("Should update last message time")
+        void shouldUpdateLastMessageTime() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+            participants.add(user1Id);
+            participants.add(user2Id);
+            Conversation conversation = new Conversation(
+                conversationId,
+                ConversationType.ONE_TO_ONE,
+                participants
+            );
+            assertNull(conversation.getLastMessageAt());
+            Instant beforeUpdate = Instant.now();
 
-        // Then
-        assertNotNull(conversation);
-        assertEquals(ConversationType.GROUP, conversation.getType());
-        assertEquals(3, conversation.getParticipants().size());
+            // When
+            conversation.updateLastMessageTime();
+
+            // Then
+            assertNotNull(conversation.getLastMessageAt());
+            assertTrue(conversation.getLastMessageAt().isAfter(beforeUpdate) ||
+                      conversation.getLastMessageAt().equals(beforeUpdate));
+        }
+
+        @Test
+        @DisplayName("Should update last message time on subsequent updates")
+        void shouldUpdateLastMessageTimeOnSubsequentUpdates() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+            participants.add(user1Id);
+            participants.add(user2Id);
+            Conversation conversation = new Conversation(
+                conversationId,
+                ConversationType.ONE_TO_ONE,
+                participants
+            );
+            conversation.updateLastMessageTime();
+            Instant firstUpdate = conversation.getLastMessageAt();
+
+            // When
+            try {
+                Thread.sleep(10); // Small delay
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            conversation.updateLastMessageTime();
+
+            // Then
+            assertTrue(conversation.getLastMessageAt().isAfter(firstUpdate) ||
+                      conversation.getLastMessageAt().equals(firstUpdate));
+        }
     }
 
-    @Test
-    @DisplayName("Should add participant to group conversation")
-    void shouldAddParticipantToGroup() {
-        // Given
-        Conversation conversation = createGroupConversation();
-        UserId newUser = new UserId(UUID.randomUUID());
-        int initialSize = conversation.getParticipants().size();
+    @Nested
+    @DisplayName("Participant Management Tests - Group Conversations")
+    class GroupParticipantManagementTests {
 
-        // When
-        conversation.addParticipant(newUser);
+        @Test
+        @DisplayName("Should add participant to group conversation")
+        void shouldAddParticipantToGroupConversation() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+            participants.add(user1Id);
+            participants.add(user2Id);
+            Conversation conversation = new Conversation(
+                conversationId,
+                ConversationType.GROUP,
+                participants
+            );
+            UserId newUser = new UserId(UUID.randomUUID());
 
-        // Then
-        assertEquals(initialSize + 1, conversation.getParticipants().size());
-        assertTrue(conversation.hasParticipant(newUser));
+            // When
+            conversation.addParticipant(newUser);
+
+            // Then
+            assertEquals(3, conversation.getParticipants().size());
+            assertTrue(conversation.hasParticipant(newUser));
+        }
+
+        @Test
+        @DisplayName("Should not add duplicate participant to group conversation")
+        void shouldNotAddDuplicateParticipantToGroupConversation() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+            participants.add(user1Id);
+            participants.add(user2Id);
+            Conversation conversation = new Conversation(
+                conversationId,
+                ConversationType.GROUP,
+                participants
+            );
+
+            // When
+            conversation.addParticipant(user1Id);
+
+            // Then
+            assertEquals(2, conversation.getParticipants().size());
+        }
+
+        @Test
+        @DisplayName("Should throw exception when adding null participant")
+        void shouldThrowExceptionWhenAddingNullParticipant() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+            participants.add(user1Id);
+            participants.add(user2Id);
+            Conversation conversation = new Conversation(
+                conversationId,
+                ConversationType.GROUP,
+                participants
+            );
+
+            // When & Then
+            assertThrows(NullPointerException.class, () ->
+                conversation.addParticipant(null)
+            );
+        }
+
+        @Test
+        @DisplayName("Should remove participant from group conversation")
+        void shouldRemoveParticipantFromGroupConversation() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+            participants.add(user1Id);
+            participants.add(user2Id);
+            participants.add(user3Id);
+            Conversation conversation = new Conversation(
+                conversationId,
+                ConversationType.GROUP,
+                participants
+            );
+
+            // When
+            conversation.removeParticipant(user3Id);
+
+            // Then
+            assertEquals(2, conversation.getParticipants().size());
+            assertFalse(conversation.hasParticipant(user3Id));
+            assertTrue(conversation.hasParticipant(user1Id));
+            assertTrue(conversation.hasParticipant(user2Id));
+        }
+
+        @Test
+        @DisplayName("Should not throw when removing non-existent participant")
+        void shouldNotThrowWhenRemovingNonExistentParticipant() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+            participants.add(user1Id);
+            participants.add(user2Id);
+            Conversation conversation = new Conversation(
+                conversationId,
+                ConversationType.GROUP,
+                participants
+            );
+            UserId nonExistentUser = new UserId(UUID.randomUUID());
+
+            // When & Then
+            assertDoesNotThrow(() -> conversation.removeParticipant(nonExistentUser));
+            assertEquals(2, conversation.getParticipants().size());
+        }
     }
 
-    @Test
-    @DisplayName("Should not allow adding participant to one-to-one conversation")
-    void shouldNotAddParticipantToOneToOne() {
-        // Given
-        Conversation conversation = createOneToOneConversation();
-        UserId newUser = new UserId(UUID.randomUUID());
+    @Nested
+    @DisplayName("Participant Management Tests - One-to-One Conversations")
+    class OneToOneParticipantManagementTests {
 
-        // When/Then
-        assertThrows(IllegalStateException.class, 
-            () -> conversation.addParticipant(newUser));
+        @Test
+        @DisplayName("Should throw exception when adding participant to one-to-one conversation")
+        void shouldThrowExceptionWhenAddingParticipantToOneToOneConversation() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+            participants.add(user1Id);
+            participants.add(user2Id);
+            Conversation conversation = new Conversation(
+                conversationId,
+                ConversationType.ONE_TO_ONE,
+                participants
+            );
+            UserId newUser = new UserId(UUID.randomUUID());
+
+            // When & Then
+            IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
+                conversation.addParticipant(newUser)
+            );
+            assertTrue(exception.getMessage().contains("Cannot add participants to one-to-one conversation"));
+        }
+
+        @Test
+        @DisplayName("Should throw exception when removing participant from one-to-one conversation")
+        void shouldThrowExceptionWhenRemovingParticipantFromOneToOneConversation() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+            participants.add(user1Id);
+            participants.add(user2Id);
+            Conversation conversation = new Conversation(
+                conversationId,
+                ConversationType.ONE_TO_ONE,
+                participants
+            );
+
+            // When & Then
+            IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
+                conversation.removeParticipant(user1Id)
+            );
+            assertTrue(exception.getMessage().contains("Cannot remove participants from one-to-one conversation"));
+        }
     }
 
-    @Test
-    @DisplayName("Should remove participant from group conversation")
-    void shouldRemoveParticipantFromGroup() {
-        // Given
-        UserId user1 = new UserId(UUID.randomUUID());
-        UserId user2 = new UserId(UUID.randomUUID());
-        UserId user3 = new UserId(UUID.randomUUID());
-        Conversation conversation = new Conversation(
-            new ConversationId(UUID.randomUUID()), 
-            ConversationType.GROUP, 
-            Set.of(user1, user2, user3)
-        );
+    @Nested
+    @DisplayName("Participant Query Tests")
+    class ParticipantQueryTests {
 
-        // When
-        conversation.removeParticipant(user3);
+        @Test
+        @DisplayName("Should correctly identify if user is participant")
+        void shouldCorrectlyIdentifyIfUserIsParticipant() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+            participants.add(user1Id);
+            participants.add(user2Id);
+            Conversation conversation = new Conversation(
+                conversationId,
+                ConversationType.ONE_TO_ONE,
+                participants
+            );
 
-        // Then
-        assertEquals(2, conversation.getParticipants().size());
-        assertFalse(conversation.hasParticipant(user3));
+            // Then
+            assertTrue(conversation.hasParticipant(user1Id));
+            assertTrue(conversation.hasParticipant(user2Id));
+            assertFalse(conversation.hasParticipant(user3Id));
+        }
+
+        @Test
+        @DisplayName("Should return unmodifiable set of participants")
+        void shouldReturnUnmodifiableSetOfParticipants() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+            participants.add(user1Id);
+            participants.add(user2Id);
+            Conversation conversation = new Conversation(
+                conversationId,
+                ConversationType.ONE_TO_ONE,
+                participants
+            );
+
+            // When
+            Set<UserId> returnedParticipants = conversation.getParticipants();
+
+            // Then
+            assertThrows(UnsupportedOperationException.class, () ->
+                returnedParticipants.add(user3Id)
+            );
+        }
     }
 
-    @Test
-    @DisplayName("Should update last message timestamp")
-    void shouldUpdateLastMessageTimestamp() {
-        // Given
-        Conversation conversation = createOneToOneConversation();
-        assertNull(conversation.getLastMessageAt());
+    @Nested
+    @DisplayName("Equality and HashCode Tests")
+    class EqualityTests {
 
-        // When
-        conversation.updateLastMessage();
+        @Test
+        @DisplayName("Should be equal when same conversationId")
+        void shouldBeEqualWhenSameConversationId() {
+            // Given
+            Set<UserId> participants1 = new HashSet<>();
+            participants1.add(user1Id);
+            participants1.add(user2Id);
+            Conversation conversation1 = new Conversation(
+                conversationId,
+                ConversationType.ONE_TO_ONE,
+                participants1
+            );
 
-        // Then
-        assertNotNull(conversation.getLastMessageAt());
+            Set<UserId> participants2 = new HashSet<>();
+            participants2.add(user1Id);
+            participants2.add(user3Id);
+            Conversation conversation2 = new Conversation(
+                conversationId,
+                ConversationType.GROUP,
+                participants2
+            );
+
+            // Then
+            assertEquals(conversation1, conversation2);
+            assertEquals(conversation1.hashCode(), conversation2.hashCode());
+        }
+
+        @Test
+        @DisplayName("Should not be equal when different conversationId")
+        void shouldNotBeEqualWhenDifferentConversationId() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+            participants.add(user1Id);
+            participants.add(user2Id);
+            Conversation conversation1 = new Conversation(
+                conversationId,
+                ConversationType.ONE_TO_ONE,
+                participants
+            );
+            Conversation conversation2 = new Conversation(
+                new ConversationId(UUID.randomUUID()),
+                ConversationType.ONE_TO_ONE,
+                participants
+            );
+
+            // Then
+            assertNotEquals(conversation1, conversation2);
+        }
+
+        @Test
+        @DisplayName("Should be equal to itself")
+        void shouldBeEqualToItself() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+            participants.add(user1Id);
+            participants.add(user2Id);
+            Conversation conversation = new Conversation(
+                conversationId,
+                ConversationType.ONE_TO_ONE,
+                participants
+            );
+
+            // Then
+            assertEquals(conversation, conversation);
+        }
+
+        @Test
+        @DisplayName("Should not be equal to null")
+        void shouldNotBeEqualToNull() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+            participants.add(user1Id);
+            participants.add(user2Id);
+            Conversation conversation = new Conversation(
+                conversationId,
+                ConversationType.ONE_TO_ONE,
+                participants
+            );
+
+            // Then
+            assertNotEquals(null, conversation);
+        }
     }
 
-    @Test
-    @DisplayName("Should check if user is participant")
-    void shouldCheckIfUserIsParticipant() {
-        // Given
-        UserId user1 = new UserId(UUID.randomUUID());
-        UserId user2 = new UserId(UUID.randomUUID());
-        UserId nonParticipant = new UserId(UUID.randomUUID());
-        Conversation conversation = new Conversation(
-            new ConversationId(UUID.randomUUID()), 
-            ConversationType.ONE_TO_ONE, 
-            Set.of(user1, user2)
-        );
+    @Nested
+    @DisplayName("Full Constructor Tests")
+    class FullConstructorTests {
 
-        // Then
-        assertTrue(conversation.hasParticipant(user1));
-        assertTrue(conversation.hasParticipant(user2));
-        assertFalse(conversation.hasParticipant(nonParticipant));
+        @Test
+        @DisplayName("Should reconstitute conversation from persistence with full constructor")
+        void shouldReconstituteConversationFromPersistence() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+            participants.add(user1Id);
+            participants.add(user2Id);
+            participants.add(user3Id);
+            Instant createdAt = Instant.now().minusSeconds(3600);
+            Instant lastMessageAt = Instant.now().minusSeconds(300);
+
+            // When
+            Conversation conversation = new Conversation(
+                conversationId,
+                ConversationType.GROUP,
+                participants,
+                createdAt,
+                lastMessageAt
+            );
+
+            // Then
+            assertEquals(conversationId, conversation.getId());
+            assertEquals(ConversationType.GROUP, conversation.getType());
+            assertEquals(3, conversation.getParticipants().size());
+            assertEquals(createdAt, conversation.getCreatedAt());
+            assertEquals(lastMessageAt, conversation.getLastMessageAt());
+        }
     }
 
-    private Conversation createOneToOneConversation() {
-        UserId user1 = new UserId(UUID.randomUUID());
-        UserId user2 = new UserId(UUID.randomUUID());
-        return new Conversation(
-            new ConversationId(UUID.randomUUID()), 
-            ConversationType.ONE_TO_ONE, 
-            Set.of(user1, user2)
-        );
-    }
+    @Nested
+    @DisplayName("ToString Tests")
+    class ToStringTests {
 
-    private Conversation createGroupConversation() {
-        UserId user1 = new UserId(UUID.randomUUID());
-        UserId user2 = new UserId(UUID.randomUUID());
-        UserId user3 = new UserId(UUID.randomUUID());
-        return new Conversation(
-            new ConversationId(UUID.randomUUID()), 
-            ConversationType.GROUP, 
-            Set.of(user1, user2, user3)
-        );
-    }
-}
-package com.realtime.communication.unit.chat.domain;
+        @Test
+        @DisplayName("Should contain key conversation information in toString")
+        void shouldContainKeyConversationInformationInToString() {
+            // Given
+            Set<UserId> participants = new HashSet<>();
+            participants.add(user1Id);
+            participants.add(user2Id);
+            Conversation conversation = new Conversation(
+                conversationId,
+                ConversationType.ONE_TO_ONE,
+                participants
+            );
 
-import com.realtime.communication.auth.domain.model.UserId;
-import com.realtime.communication.chat.domain.model.*;
-import com.realtime.communication.shared.domain.exception.ValidationException;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
+            // When
+            String toString = conversation.toString();
 
-import java.time.Instant;
-import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.*;
-
-/**
- * Unit tests for Message entity (Domain Layer)
- * TDD: These tests are written BEFORE implementation
- */
-@DisplayName("Message Entity Tests")
-class MessageTest {
-
-    @Test
-    @DisplayName("Should create valid message with all required fields")
-    void shouldCreateValidMessage() {
-        // Given
-        MessageId messageId = new MessageId(UUID.randomUUID());
-        ConversationId conversationId = new ConversationId(UUID.randomUUID());
-        UserId senderId = new UserId(UUID.randomUUID());
-        String content = "Hello, World!";
-
-        // When
-        Message message = new Message(messageId, conversationId, senderId, content, MessageType.TEXT);
-
-        // Then
-        assertNotNull(message);
-        assertEquals(messageId, message.getId());
-        assertEquals(conversationId, message.getConversationId());
-        assertEquals(senderId, message.getSenderId());
-        assertEquals(content, message.getContent());
-        assertEquals(MessageType.TEXT, message.getType());
-        assertEquals(MessageStatus.SENT, message.getStatus());
-        assertNotNull(message.getSentAt());
-        assertNull(message.getDeliveredAt());
-        assertNull(message.getReadAt());
-    }
-
-    @Test
-    @DisplayName("Should throw exception when content is empty")
-    void shouldThrowExceptionForEmptyContent() {
-        // Given
-        MessageId messageId = new MessageId(UUID.randomUUID());
-        ConversationId conversationId = new ConversationId(UUID.randomUUID());
-        UserId senderId = new UserId(UUID.randomUUID());
-
-        // When/Then
-        assertThrows(ValidationException.class, 
-            () -> new Message(messageId, conversationId, senderId, "", MessageType.TEXT));
-        assertThrows(ValidationException.class, 
-            () -> new Message(messageId, conversationId, senderId, null, MessageType.TEXT));
-    }
-
-    @Test
-    @DisplayName("Should mark message as delivered")
-    void shouldMarkAsDelivered() {
-        // Given
-        Message message = createValidMessage();
-        Instant beforeDelivery = Instant.now();
-
-        // When
-        message.markAsDelivered();
-
-        // Then
-        assertEquals(MessageStatus.DELIVERED, message.getStatus());
-        assertNotNull(message.getDeliveredAt());
-        assertTrue(message.getDeliveredAt().isAfter(beforeDelivery) || 
-                   message.getDeliveredAt().equals(beforeDelivery));
-    }
-
-    @Test
-    @DisplayName("Should mark message as read")
-    void shouldMarkAsRead() {
-        // Given
-        Message message = createValidMessage();
-        message.markAsDelivered();
-        Instant beforeRead = Instant.now();
-
-        // When
-        message.markAsRead();
-
-        // Then
-        assertEquals(MessageStatus.READ, message.getStatus());
-        assertNotNull(message.getReadAt());
-        assertTrue(message.getReadAt().isAfter(beforeRead) || 
-                   message.getReadAt().equals(beforeRead));
-    }
-
-    @Test
-    @DisplayName("Should not allow marking as read before delivered")
-    void shouldNotMarkAsReadBeforeDelivered() {
-        // Given
-        Message message = createValidMessage();
-
-        // When/Then
-        assertThrows(IllegalStateException.class, message::markAsRead);
-    }
-
-    @Test
-    @DisplayName("Should update message content for editable messages")
-    void shouldUpdateContent() {
-        // Given
-        Message message = createValidMessage();
-        String newContent = "Updated content";
-
-        // When
-        message.updateContent(newContent);
-
-        // Then
-        assertEquals(newContent, message.getContent());
-        assertTrue(message.isEdited());
-        assertNotNull(message.getEditedAt());
-    }
-
-    @Test
-    @DisplayName("Should delete message")
-    void shouldDeleteMessage() {
-        // Given
-        Message message = createValidMessage();
-
-        // When
-        message.delete();
-
-        // Then
-        assertTrue(message.isDeleted());
-        assertNotNull(message.getDeletedAt());
-    }
-
-    private Message createValidMessage() {
-        return new Message(
-            new MessageId(UUID.randomUUID()),
-            new ConversationId(UUID.randomUUID()),
-            new UserId(UUID.randomUUID()),
-            "Test message content",
-            MessageType.TEXT
-        );
+            // Then
+            assertTrue(toString.contains("Conversation{"));
+            assertTrue(toString.contains("id="));
+            assertTrue(toString.contains("type="));
+            assertTrue(toString.contains("participantCount="));
+            assertTrue(toString.contains("createdAt="));
+        }
     }
 }
 

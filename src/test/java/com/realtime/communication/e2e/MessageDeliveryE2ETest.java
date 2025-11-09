@@ -1,321 +1,365 @@
 package com.realtime.communication.e2e;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.realtime.communication.auth.application.dto.LoginRequest;
 import com.realtime.communication.auth.application.dto.LoginResponse;
 import com.realtime.communication.auth.application.dto.RegisterRequest;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.http.*;
-import org.springframework.messaging.converter.MappingJackson2MessageConverter;
-import org.springframework.messaging.simp.stomp.StompFrameHandler;
-import org.springframework.messaging.simp.stomp.StompHeaders;
-import org.springframework.messaging.simp.stomp.StompSession;
-import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
-import org.springframework.web.socket.client.standard.StandardWebSocketClient;
-import org.springframework.web.socket.messaging.WebSocketStompClient;
-
-import java.lang.reflect.Type;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-
-import static org.junit.jupiter.api.Assertions.*;
-
-/**
- * End-to-End test for complete message delivery flow
- * Tests the complete user journey from registration to message exchange
- */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@DisplayName("Message Delivery E2E Tests")
-class MessageDeliveryE2ETest {
-
-    @LocalServerPort
-    private int port;
-
-    @Autowired
-    private TestRestTemplate restTemplate;
-
-    @Test
-    @DisplayName("Complete flow: Register -> Login -> Send Message -> Receive Message")
-    void completeMessageDeliveryFlow() throws Exception {
-        // Step 1: Register two users
-        RegisterRequest user1Register = new RegisterRequest(
-            "user1", "user1@example.com", "SecurePass123!", "User One"
-        );
-        RegisterRequest user2Register = new RegisterRequest(
-            "user2", "user2@example.com", "SecurePass123!", "User Two"
-        );
-
-        ResponseEntity<String> user1Response = restTemplate.postForEntity(
-            "/api/v1/auth/register", user1Register, String.class
-        );
-        ResponseEntity<String> user2Response = restTemplate.postForEntity(
-            "/api/v1/auth/register", user2Register, String.class
-        );
-
-        assertEquals(HttpStatus.CREATED, user1Response.getStatusCode());
-        assertEquals(HttpStatus.CREATED, user2Response.getStatusCode());
-
-        // Step 2: Login both users
-        LoginRequest user1Login = new LoginRequest("user1", "SecurePass123!");
-        LoginRequest user2Login = new LoginRequest("user2", "SecurePass123!");
-
-        ResponseEntity<LoginResponse> user1LoginResponse = restTemplate.postForEntity(
-            "/api/v1/auth/login", user1Login, LoginResponse.class
-        );
-        ResponseEntity<LoginResponse> user2LoginResponse = restTemplate.postForEntity(
-            "/api/v1/auth/login", user2Login, LoginResponse.class
-        );
-
-        assertEquals(HttpStatus.OK, user1LoginResponse.getStatusCode());
-        assertEquals(HttpStatus.OK, user2LoginResponse.getStatusCode());
-
-        String user1Token = user1LoginResponse.getBody().getAccessToken();
-        String user2Token = user2LoginResponse.getBody().getAccessToken();
-
-        // Step 3: Create conversation
-        HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(user1Token);
-        headers.setContentType(MediaType.APPLICATION_JSON);
-
-        String conversationRequest = """
-            {
-                "participantIds": ["user2-id"],
-                "type": "ONE_TO_ONE"
-            }
-            """;
-
-        ResponseEntity<String> conversationResponse = restTemplate.exchange(
-            "/api/v1/conversations",
-            HttpMethod.POST,
-            new HttpEntity<>(conversationRequest, headers),
-            String.class
-        );
-
-        assertEquals(HttpStatus.CREATED, conversationResponse.getStatusCode());
-
-        // Step 4: Connect User 2 to WebSocket and subscribe to messages
-        String wsUrl = "ws://localhost:" + port + "/ws";
-        WebSocketStompClient stompClient = new WebSocketStompClient(new StandardWebSocketClient());
-        stompClient.setMessageConverter(new MappingJackson2MessageConverter());
-
-        CountDownLatch messageLatch = new CountDownLatch(1);
-        AtomicReference<String> receivedMessage = new AtomicReference<>();
-
-        StompSession user2Session = stompClient.connect(wsUrl, new StompSessionHandlerAdapter() {})
-            .get(5, TimeUnit.SECONDS);
-
-        user2Session.subscribe("/user/queue/messages", new StompFrameHandler() {
-            @Override
-            public Type getPayloadType(StompHeaders headers) {
-                return String.class;
-            }
-
-            @Override
-            public void handleFrame(StompHeaders headers, Object payload) {
-                receivedMessage.set((String) payload);
-                messageLatch.countDown();
-            }
-        });
-
-        // Step 5: User 1 sends message via WebSocket
-        StompSession user1Session = stompClient.connect(wsUrl, new StompSessionHandlerAdapter() {})
-            .get(5, TimeUnit.SECONDS);
-
-        String messagePayload = """
-            {
-                "conversationId": "test-conversation-id",
-                "content": "Hello from User 1!",
-                "type": "TEXT"
-            }
-            """;
-
-        user1Session.send("/app/chat.send", messagePayload.getBytes());
-
-        // Step 6: Verify User 2 receives the message within 1 second (per requirements)
-        assertTrue(messageLatch.await(1, TimeUnit.SECONDS),
-            "Message should be delivered in less than 1 second");
-        assertNotNull(receivedMessage.get());
-        assertTrue(receivedMessage.get().contains("Hello from User 1!"));
-
-        // Cleanup
-        user1Session.disconnect();
-        user2Session.disconnect();
-    }
-
-    @Test
-    @DisplayName("Should support typing indicators")
-    void shouldSupportTypingIndicators() throws Exception {
-        // Setup WebSocket connection
-        String wsUrl = "ws://localhost:" + port + "/ws";
-        WebSocketStompClient stompClient = new WebSocketStompClient(new StandardWebSocketClient());
-        stompClient.setMessageConverter(new MappingJackson2MessageConverter());
-
-        CountDownLatch typingLatch = new CountDownLatch(1);
-
-        StompSession session = stompClient.connect(wsUrl, new StompSessionHandlerAdapter() {})
-            .get(5, TimeUnit.SECONDS);
-
-        // Subscribe to typing indicators
-        session.subscribe("/topic/conversation/typing", new StompFrameHandler() {
-            @Override
-            public Type getPayloadType(StompHeaders headers) {
-                return String.class;
-            }
-
-            @Override
-            public void handleFrame(StompHeaders headers, Object payload) {
-                typingLatch.countDown();
-            }
-        });
-
-        // Send typing indicator
-        String typingPayload = """
-            {
-                "conversationId": "test-conversation-id",
-                "isTyping": true
-            }
-            """;
-
-        session.send("/app/chat.typing", typingPayload.getBytes());
-
-        assertTrue(typingLatch.await(2, TimeUnit.SECONDS));
-        session.disconnect();
-    }
-
-    @Test
-    @DisplayName("Should load conversation history via REST API")
-    void shouldLoadConversationHistory() {
-        // Register and login
-        RegisterRequest registerRequest = new RegisterRequest(
-            "historyuser", "history@example.com", "SecurePass123!", "History User"
-        );
-        restTemplate.postForEntity("/api/v1/auth/register", registerRequest, String.class);
-
-        LoginRequest loginRequest = new LoginRequest("historyuser", "SecurePass123!");
-        ResponseEntity<LoginResponse> loginResponse = restTemplate.postForEntity(
-            "/api/v1/auth/login", loginRequest, LoginResponse.class
-        );
-
-        String token = loginResponse.getBody().getAccessToken();
-
-        // Load conversation history
-        HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(token);
-
-        ResponseEntity<String> historyResponse = restTemplate.exchange(
-            "/api/v1/conversations/test-conversation-id/messages?page=0&size=20",
-            HttpMethod.GET,
-            new HttpEntity<>(headers),
-            String.class
-        );
-
-        assertEquals(HttpStatus.OK, historyResponse.getStatusCode());
-    }
-}
-package com.realtime.communication.integration.contracts;
-
-import com.realtime.communication.auth.adapter.in.rest.AuthController;
-import com.realtime.communication.auth.application.dto.LoginRequest;
-import com.realtime.communication.auth.application.dto.RegisterRequest;
+import com.realtime.communication.auth.domain.model.UserId;
+import com.realtime.communication.chat.domain.model.ConversationId;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.KafkaContainer;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Contract test for Auth REST API
- * Validates API contract against auth-api.yaml specification
+ * End-to-End test for complete message delivery flow
+ * Tests the entire flow from user registration to message delivery
  */
 @SpringBootTest
 @AutoConfigureMockMvc
-@DisplayName("Auth API Contract Tests")
-class AuthApiContractTest {
+@Testcontainers
+@DisplayName("Message Delivery E2E Tests")
+class MessageDeliveryE2ETest {
+
+    @Container
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
+            .withDatabaseName("testdb")
+            .withUsername("test")
+            .withPassword("test");
+
+    @Container
+    static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
+            .withExposedPorts(6379);
+
+    @Container
+    static KafkaContainer kafka = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.5.0"))
+            .withKraft();
+
+    @DynamicPropertySource
+    static void configureProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", postgres::getJdbcUrl);
+        registry.add("spring.datasource.username", postgres::getUsername);
+        registry.add("spring.datasource.password", postgres::getPassword);
+        registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
+
+        registry.add("spring.data.redis.host", redis::getHost);
+        registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379).toString());
+
+        registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
+    }
 
     @Autowired
     private MockMvc mockMvc;
 
-    @Test
-    @DisplayName("POST /api/v1/auth/register - should match contract")
-    void registerEndpointShouldMatchContract() throws Exception {
-        String requestBody = """
-            {
-                "username": "newuser",
-                "email": "newuser@example.com",
-                "password": "SecurePass123!",
-                "displayName": "New User"
-            }
-            """;
+    @Autowired
+    private ObjectMapper objectMapper;
 
-        mockMvc.perform(post("/api/v1/auth/register")
+    private String user1Token;
+    private String user2Token;
+    private String user1Id;
+    private String user2Id;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        // Register and login two users
+        user1Token = registerAndLoginUser("alice", "alice@example.com", "AlicePass123!");
+        user2Token = registerAndLoginUser("bob", "bob@example.com", "BobPass123!");
+    }
+
+    @Test
+    @DisplayName("E2E: Complete message delivery flow from sender to recipient")
+    void completeMessageDeliveryFlow() throws Exception {
+        // Step 1: Alice creates a conversation with Bob
+        Map<String, Object> createConversationRequest = new HashMap<>();
+        createConversationRequest.put("type", "ONE_TO_ONE");
+        createConversationRequest.put("participantIds", new String[]{user1Id, user2Id});
+
+        MvcResult conversationResult = mockMvc.perform(post("/api/conversations")
+                .header("Authorization", "Bearer " + user1Token)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                .content(objectMapper.writeValueAsString(createConversationRequest)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").exists())
-                .andExpect(jsonPath("$.username").value("newuser"))
-                .andExpect(jsonPath("$.email").value("newuser@example.com"));
-    }
+                .andExpect(jsonPath("$.type").value("ONE_TO_ONE"))
+                .andReturn();
 
-    @Test
-    @DisplayName("POST /api/v1/auth/login - should match contract")
-    void loginEndpointShouldMatchContract() throws Exception {
-        String requestBody = """
-            {
-                "username": "testuser",
-                "password": "SecurePass123!"
-            }
-            """;
+        String responseBody = conversationResult.getResponse().getContentAsString();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> conversationData = objectMapper.readValue(responseBody, Map.class);
+        String conversationId = (String) conversationData.get("id");
 
-        mockMvc.perform(post("/api/v1/auth/login")
+        assertNotNull(conversationId);
+
+        // Step 2: Alice sends a message to the conversation
+        Map<String, Object> sendMessageRequest = new HashMap<>();
+        sendMessageRequest.put("conversationId", conversationId);
+        sendMessageRequest.put("content", "Hello Bob! How are you?");
+        sendMessageRequest.put("type", "TEXT");
+
+        MvcResult messageResult = mockMvc.perform(post("/api/messages")
+                .header("Authorization", "Bearer " + user1Token)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                .content(objectMapper.writeValueAsString(sendMessageRequest)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.content").value("Hello Bob! How are you?"))
+                .andExpect(jsonPath("$.status").value("SENT"))
+                .andReturn();
+
+        String messageResponseBody = messageResult.getResponse().getContentAsString();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> messageData = objectMapper.readValue(messageResponseBody, Map.class);
+        String messageId = (String) messageData.get("id");
+
+        assertNotNull(messageId);
+
+        // Step 3: Bob retrieves the conversation history and sees Alice's message
+        mockMvc.perform(get("/api/conversations/" + conversationId + "/messages")
+                .header("Authorization", "Bearer " + user2Token)
+                .param("page", "0")
+                .param("size", "20"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").exists())
-                .andExpect(jsonPath("$.refreshToken").exists())
-                .andExpect(jsonPath("$.expiresIn").exists());
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content[0].id").value(messageId))
+                .andExpect(jsonPath("$.content[0].content").value("Hello Bob! How are you?"))
+                .andExpect(jsonPath("$.content[0].senderId").exists());
+
+        // Step 4: Bob sends a reply
+        Map<String, Object> replyMessageRequest = new HashMap<>();
+        replyMessageRequest.put("conversationId", conversationId);
+        replyMessageRequest.put("content", "Hi Alice! I'm doing great, thanks!");
+        replyMessageRequest.put("type", "TEXT");
+
+        mockMvc.perform(post("/api/messages")
+                .header("Authorization", "Bearer " + user2Token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(replyMessageRequest)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.content").value("Hi Alice! I'm doing great, thanks!"))
+                .andExpect(jsonPath("$.status").value("SENT"));
+
+        // Step 5: Alice retrieves conversation history and sees both messages
+        mockMvc.perform(get("/api/conversations/" + conversationId + "/messages")
+                .header("Authorization", "Bearer " + user1Token)
+                .param("page", "0")
+                .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.totalElements").value(2));
+
+        // Step 6: Verify conversation's last message timestamp was updated
+        mockMvc.perform(get("/api/conversations/" + conversationId)
+                .header("Authorization", "Bearer " + user1Token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(conversationId))
+                .andExpect(jsonPath("$.lastMessageAt").exists());
     }
 
     @Test
-    @DisplayName("POST /api/v1/auth/register - should validate request body")
-    void registerShouldValidateRequestBody() throws Exception {
-        String invalidRequest = """
-            {
-                "username": "ab",
-                "email": "invalid-email",
-                "password": "weak"
-            }
-            """;
+    @DisplayName("E2E: Message delivery with offline user queuing")
+    void messageDeliveryWithOfflineUserQueuing() throws Exception {
+        // Step 1: Create conversation
+        Map<String, Object> createConversationRequest = new HashMap<>();
+        createConversationRequest.put("type", "ONE_TO_ONE");
+        createConversationRequest.put("participantIds", new String[]{user1Id, user2Id});
 
-        mockMvc.perform(post("/api/v1/auth/register")
+        MvcResult conversationResult = mockMvc.perform(post("/api/conversations")
+                .header("Authorization", "Bearer " + user1Token)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(invalidRequest))
-                .andExpect(status().isBadRequest());
+                .content(objectMapper.writeValueAsString(createConversationRequest)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String responseBody = conversationResult.getResponse().getContentAsString();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> conversationData = objectMapper.readValue(responseBody, Map.class);
+        String conversationId = (String) conversationData.get("id");
+
+        // Step 2: Alice sends message while Bob is "offline"
+        Map<String, Object> sendMessageRequest = new HashMap<>();
+        sendMessageRequest.put("conversationId", conversationId);
+        sendMessageRequest.put("content", "Message sent while you were offline");
+        sendMessageRequest.put("type", "TEXT");
+
+        mockMvc.perform(post("/api/messages")
+                .header("Authorization", "Bearer " + user1Token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(sendMessageRequest)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("SENT"));
+
+        // Step 3: Bob comes online and retrieves messages
+        mockMvc.perform(get("/api/conversations/" + conversationId + "/messages")
+                .header("Authorization", "Bearer " + user2Token)
+                .param("page", "0")
+                .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].content").value("Message sent while you were offline"));
     }
 
     @Test
-    @DisplayName("POST /api/v1/auth/login - should return 401 for invalid credentials")
-    void loginShouldReturn401ForInvalidCredentials() throws Exception {
-        String requestBody = """
-            {
-                "username": "testuser",
-                "password": "WrongPassword"
-            }
-            """;
+    @DisplayName("E2E: Unauthorized user cannot access conversation")
+    void unauthorizedUserCannotAccessConversation() throws Exception {
+        // Step 1: Alice creates a conversation with Bob
+        Map<String, Object> createConversationRequest = new HashMap<>();
+        createConversationRequest.put("type", "ONE_TO_ONE");
+        createConversationRequest.put("participantIds", new String[]{user1Id, user2Id});
 
-        mockMvc.perform(post("/api/v1/auth/login")
+        MvcResult conversationResult = mockMvc.perform(post("/api/conversations")
+                .header("Authorization", "Bearer " + user1Token)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(requestBody))
+                .content(objectMapper.writeValueAsString(createConversationRequest)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String responseBody = conversationResult.getResponse().getContentAsString();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> conversationData = objectMapper.readValue(responseBody, Map.class);
+        String conversationId = (String) conversationData.get("id");
+
+        // Step 2: Register a third user (Charlie)
+        String charlieToken = registerAndLoginUser("charlie", "charlie@example.com", "CharliePass123!");
+
+        // Step 3: Charlie tries to access Alice and Bob's conversation
+        mockMvc.perform(get("/api/conversations/" + conversationId + "/messages")
+                .header("Authorization", "Bearer " + charlieToken)
+                .param("page", "0")
+                .param("size", "20"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("E2E: Message pagination works correctly")
+    void messagePaginationWorksCorrectly() throws Exception {
+        // Step 1: Create conversation
+        Map<String, Object> createConversationRequest = new HashMap<>();
+        createConversationRequest.put("type", "ONE_TO_ONE");
+        createConversationRequest.put("participantIds", new String[]{user1Id, user2Id});
+
+        MvcResult conversationResult = mockMvc.perform(post("/api/conversations")
+                .header("Authorization", "Bearer " + user1Token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(createConversationRequest)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String responseBody = conversationResult.getResponse().getContentAsString();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> conversationData = objectMapper.readValue(responseBody, Map.class);
+        String conversationId = (String) conversationData.get("id");
+
+        // Step 2: Send 10 messages
+        for (int i = 1; i <= 10; i++) {
+            Map<String, Object> sendMessageRequest = new HashMap<>();
+            sendMessageRequest.put("conversationId", conversationId);
+            sendMessageRequest.put("content", "Message " + i);
+            sendMessageRequest.put("type", "TEXT");
+
+            mockMvc.perform(post("/api/messages")
+                    .header("Authorization", "Bearer " + user1Token)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(sendMessageRequest)))
+                    .andExpect(status().isCreated());
+        }
+
+        // Step 3: Retrieve first page (5 messages)
+        mockMvc.perform(get("/api/conversations/" + conversationId + "/messages")
+                .header("Authorization", "Bearer " + user2Token)
+                .param("page", "0")
+                .param("size", "5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(5))
+                .andExpect(jsonPath("$.totalElements").value(10))
+                .andExpect(jsonPath("$.totalPages").value(2))
+                .andExpect(jsonPath("$.first").value(true))
+                .andExpect(jsonPath("$.last").value(false));
+
+        // Step 4: Retrieve second page
+        mockMvc.perform(get("/api/conversations/" + conversationId + "/messages")
+                .header("Authorization", "Bearer " + user2Token)
+                .param("page", "1")
+                .param("size", "5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(5))
+                .andExpect(jsonPath("$.first").value(false))
+                .andExpect(jsonPath("$.last").value(true));
+    }
+
+    @Test
+    @DisplayName("E2E: Cannot send message without authentication")
+    void cannotSendMessageWithoutAuthentication() throws Exception {
+        // Given
+        String conversationId = UUID.randomUUID().toString();
+        Map<String, Object> sendMessageRequest = new HashMap<>();
+        sendMessageRequest.put("conversationId", conversationId);
+        sendMessageRequest.put("content", "Unauthorized message");
+        sendMessageRequest.put("type", "TEXT");
+
+        // When & Then
+        mockMvc.perform(post("/api/messages")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(sendMessageRequest)))
                 .andExpect(status().isUnauthorized());
+    }
+
+    // Helper method to register and login a user
+    private String registerAndLoginUser(String username, String email, String password) throws Exception {
+        // Register
+        RegisterRequest registerRequest = new RegisterRequest(username, email, password, username);
+
+        MvcResult registerResult = mockMvc.perform(post("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(registerRequest)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String registerResponseBody = registerResult.getResponse().getContentAsString();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> userData = objectMapper.readValue(registerResponseBody, Map.class);
+        String userId = (String) userData.get("id");
+
+        if (user1Id == null) {
+            user1Id = userId;
+        } else if (user2Id == null) {
+            user2Id = userId;
+        }
+
+        // Login
+        LoginRequest loginRequest = new LoginRequest(username, password);
+
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(loginRequest)))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String loginResponseBody = loginResult.getResponse().getContentAsString();
+        LoginResponse loginResponse = objectMapper.readValue(loginResponseBody, LoginResponse.class);
+
+        return loginResponse.accessToken();
     }
 }
 
