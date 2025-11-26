@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+
 /**
  * Kafka adapter for publishing auth-related domain events.
  * Publishes events to the auth-events topic for consumption by other services.
