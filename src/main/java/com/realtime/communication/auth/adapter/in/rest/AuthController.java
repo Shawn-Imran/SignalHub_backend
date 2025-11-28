@@ -10,7 +10,7 @@ import com.realtime.communication.auth.application.usecase.RefreshTokenUseCase;
 import com.realtime.communication.auth.application.usecase.RegisterUserUseCase;
 import com.realtime.communication.auth.domain.event.UserRegisteredEvent;
 import com.realtime.communication.auth.domain.model.User;
-import com.realtime.communication.shared.domain.exception.ValidationException;
+import com.realtime.communication.shared.infrastructure.web.GlobalExceptionHandler.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -18,6 +18,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -26,7 +27,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -71,31 +71,26 @@ public class AuthController {
     public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterRequest request) {
         logger.info("Registration request received for username: {}", request.username());
 
-        try {
-            User user = registerUserUseCase.execute(request);
+        User user = registerUserUseCase.execute(request);
 
-            // Publish user registered event
-            UserRegisteredEvent event = new UserRegisteredEvent(
-                    user.getId(),
-                    user.getUsername().getValue(),
-                    user.getEmail().getValue()
-            );
-            eventPublisher.publishUserRegistered(event);
+        // Publish user registered event
+        UserRegisteredEvent event = new UserRegisteredEvent(
+                user.getId(),
+                user.getUsername().getValue(),
+                user.getEmail().getValue()
+        );
+        eventPublisher.publishUserRegistered(event);
 
-            logger.info("User registered successfully: userId={}", user.getId().getValue());
+        logger.info("User registered successfully: userId={}", user.getId().getValue());
 
-            RegisterResponse response = new RegisterResponse(
-                    user.getId().getValue().toString(),
-                    user.getUsername().getValue(),
-                    user.getEmail().getValue(),
-                    user.getCreatedAt()
-            );
+        RegisterResponse response = new RegisterResponse(
+                user.getId().getValue().toString(),
+                user.getUsername().getValue(),
+                user.getEmail().getValue(),
+                user.getCreatedAt()
+        );
 
-            return ResponseEntity.status(HttpStatus.CREATED).body(response);
-        } catch (ValidationException e) {
-            logger.warn("Registration validation failed: {}", e.getMessage());
-            throw e;
-        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PostMapping("/login")
@@ -139,11 +134,10 @@ public class AuthController {
                     content = @Content(schema = @Schema(implementation = TokenResponse.class))),
             @ApiResponse(responseCode = "401", description = "Invalid or expired refresh token")
     })
-    public ResponseEntity<TokenResponse> refreshToken(@RequestBody Map<String, String> request) {
-        String refreshToken = request.get("refreshToken");
+    public ResponseEntity<TokenResponse> refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
         logger.info("Token refresh request received");
 
-        LoginResponse response = refreshTokenUseCase.execute(refreshToken);
+        LoginResponse response = refreshTokenUseCase.execute(request.refreshToken());
 
         TokenResponse tokenResponse = new TokenResponse(
                 response.accessToken(),
@@ -169,11 +163,9 @@ public class AuthController {
             Long expiresIn
     ) {}
 
-    public record ErrorResponse(
-            String error,
-            String message,
-            Instant timestamp,
-            String path
+    public record RefreshTokenRequest(
+            @NotBlank(message = "Refresh token is required")
+            String refreshToken
     ) {}
 }
 
